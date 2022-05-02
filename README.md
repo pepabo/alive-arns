@@ -71,3 +71,4 @@ $ alive-arns -t json | jq 'group_by(.region) | map({"region": .[0].region, "coun
 
 - [ARNs that can be retrieved with the Resource Groups Tagging API](https://docs.aws.amazon.com/resourcegroupstagging/latest/APIReference/supported-services.html)
 - `arn:aws:iam:*`
+- `arn:aws:securityhub:*`
