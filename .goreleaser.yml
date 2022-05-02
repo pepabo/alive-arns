@@ -1,0 +1,77 @@
+before:
+  hooks:
+    - go mod download
+    - go mod tidy
+builds:
+  -
+    id: alive-arns-darwin
+    ldflags:
+      - -s -w -X github.com/pepabo/alive-arns.version={{.Version}} -X github.com/pepabo/alive-arns.commit={{.FullCommit}} -X github.com/pepabo/alive-arns.date={{.Date}} -X github.com/pepabo/alive-arns/version.Version={{.Version}}
+    goos:
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+  -
+    id: alive-arns-linux
+    ldflags:
+      - -s -w -X github.com/pepabo/alive-arns.version={{.Version}} -X github.com/pepabo/alive-arns.commit={{.FullCommit}} -X github.com/pepabo/alive-arns.date={{.Date}} -X github.com/pepabo/alive-arns/version.Version={{.Version}}
+    goos:
+      - linux
+    goarch:
+      - amd64
+archives:
+  -
+    id: alive-arns-archive
+    name_template: '{{ .ProjectName }}_v{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}'
+    format_overrides:
+      - goos: darwin
+        format: zip
+    files:
+      - CREDITS
+      - README.md
+      - CHANGELOG.md
+checksum:
+  name_template: 'checksums.txt'
+snapshot:
+  name_template: "{{ .Version }}-next"
+changelog:
+  skip: true
+  sort: asc
+  filters:
+    exclude:
+    - '^docs:'
+    - '^test:'
+brews:
+  -
+    name: alive-arns
+    tap:
+      owner: pepabo
+      name: homebrew-tap
+    commit_author:
+      name: 'GMO Pepabo, inc.'
+    homepage: https://github.com/pepabo/alive-arns
+    description: alive-arns print AWS Resource Names across all regions.
+    license: MIT
+    install: |
+      bin.install 'alive-arns'
+      output = Utils.safe_popen_read("#{bin}/alive-arns", 'completion', 'bash')
+      (bash_completion/'alive-arns').write output
+      output = Utils.safe_popen_read("#{bin}/alive-arns", 'completion', 'zsh')
+      (zsh_completion/'_alive-arns').write output
+nfpms:
+  -
+    id: alive-arns-nfpms
+    file_name_template: "{{ .ProjectName }}_{{ .Version }}-1_{{ .Arch }}"
+    builds:
+      - alive-arns-linux
+    homepage: https://github.com/pepabo/alive-arns
+    maintainer: 'GMO Pepabo, inc.'
+    description: alive-arns print AWS Resource Names across all regions.
+    license: MIT
+    formats:
+      - deb
+      - rpm
+      - apk
+    bindir: /usr/bin
+    epoch: 1
