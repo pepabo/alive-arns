@@ -2,6 +2,7 @@ package arn
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"sort"
 	"strings"
@@ -16,12 +17,47 @@ import (
 var maxItem int32 = 1000
 
 type Arn struct {
-	arn    string
-	region *string
+	Arn       string `json:"arn"`
+	Partition string `json:"partition"`
+	Service   string `json:"service"`
+	// omitempty is not set because the output is not easy to use
+	Region       string `json:"region"`
+	AccountID    string `json:"account_id"`
+	ResourceType string `json:"resource_type"`
+	ResourceID   string `json:"resource_id"`
+}
+
+func New(arn string) (*Arn, error) {
+	splitted := strings.Split(arn, ":")
+	if len(splitted) != 6 && len(splitted) != 7 {
+		return nil, fmt.Errorf("invalid arn format: %s", arn)
+	}
+	a := &Arn{
+		Arn:       arn,
+		Partition: splitted[1],
+		Service:   splitted[2],
+		Region:    splitted[3],
+		AccountID: splitted[4],
+	}
+	switch len(splitted) {
+	case 6:
+		splitted2 := strings.SplitN(splitted[5], "/", 2)
+		switch len(splitted) {
+		case 2:
+			a.ResourceType = splitted2[0]
+			a.ResourceID = splitted2[1]
+		case 1:
+			a.ResourceID = splitted2[0]
+		}
+	case 7:
+		a.ResourceType = splitted[5]
+		a.ResourceID = splitted[6]
+	}
+	return a, nil
 }
 
 func (a *Arn) String() string {
-	return a.arn
+	return a.Arn
 }
 
 type Arns []*Arn
@@ -47,17 +83,15 @@ func (arns Arns) Sort() Arns {
 }
 
 type Collector struct {
-	mu     sync.Mutex
-	once   bool
-	region string
+	mu   sync.Mutex
+	once bool
 }
 
-func New() *Collector {
+func NewCollector() *Collector {
 	return &Collector{}
 }
 
 func (c *Collector) CollectArns(ctx context.Context, cfg aws.Config) (Arns, error) {
-	c.region = cfg.Region
 	arns, err := collectArnsUsingTaggingApi(ctx, cfg)
 	if err != nil {
 		return nil, err
@@ -171,17 +205,11 @@ func (c *Collector) callListMethod(ctx context.Context, client interface{}, m re
 				rr := r.Field(i).Index(j)
 				arn, ok := getFieldString(rr, "Arn")
 				if ok {
-					if strings.Contains(arn, c.region) {
-						arns = append(arns, &Arn{
-							region: &c.region,
-							arn:    arn,
-						})
-					} else {
-						arns = append(arns, &Arn{
-							region: nil,
-							arn:    arn,
-						})
+					a, err := New(arn)
+					if err != nil {
+						return nil, nil, err
 					}
+					arns = append(arns, a)
 				}
 			}
 		}
@@ -212,7 +240,6 @@ func getFieldString(s reflect.Value, contains string) (string, bool) {
 
 func collectArnsUsingTaggingApi(ctx context.Context, cfg aws.Config) (Arns, error) {
 	var token *string
-	region := cfg.Region
 	arns := Arns{}
 	c := taggingapi.NewFromConfig(cfg)
 	for {
@@ -223,18 +250,11 @@ func collectArnsUsingTaggingApi(ctx context.Context, cfg aws.Config) (Arns, erro
 			return nil, err
 		}
 		for _, r := range o.ResourceTagMappingList {
-			arn := *r.ResourceARN
-			if strings.Contains(arn, region) {
-				arns = append(arns, &Arn{
-					region: &region,
-					arn:    arn,
-				})
-			} else {
-				arns = append(arns, &Arn{
-					region: nil,
-					arn:    arn,
-				})
+			arn, err := New(*r.ResourceARN)
+			if err != nil {
+				return nil, err
 			}
+			arns = append(arns, arn)
 		}
 		if o.PaginationToken == nil || *o.PaginationToken == "" {
 			break

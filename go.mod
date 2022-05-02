@@ -8,6 +8,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ec2 v1.37.0
 	github.com/aws/aws-sdk-go-v2/service/iam v1.18.4
 	github.com/aws/aws-sdk-go-v2/service/resourcegroupstaggingapi v1.13.5
+	github.com/goccy/go-json v0.9.7
 	github.com/rs/zerolog v1.26.1
 	github.com/spf13/cobra v1.4.0
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
