@@ -11,6 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
 	taggingapi "github.com/aws/aws-sdk-go-v2/service/resourcegroupstaggingapi"
+	"github.com/aws/aws-sdk-go-v2/service/securityhub"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -106,7 +107,9 @@ func (c *Collector) CollectArns(ctx context.Context, cfg aws.Config) (Arns, erro
 
 func (c *Collector) collectArns(ctx context.Context, cfg aws.Config) (Arns, error) {
 	arns := Arns{}
-	// clients := []interface{}
+	clients := []interface{}{
+		securityhub.NewFromConfig(cfg),
+	}
 	clientsOnce := []interface{}{
 		iam.NewFromConfig(cfg),
 	}
@@ -142,6 +145,9 @@ func (c *Collector) collectArns(ctx context.Context, cfg aws.Config) (Arns, erro
 		}
 	}
 
+	for _, client := range clients {
+		callMethods(client)
+	}
 	if !c.once {
 		for _, client := range clientsOnce {
 			callMethods(client)
@@ -173,19 +179,30 @@ func (c *Collector) callListMethod(ctx context.Context, client interface{}, m re
 				// *Input
 				input := reflect.New(t.In(i).Elem())
 
-				// Pagination
-				f := input.Elem().FieldByName("Marker")
-				if f.IsValid() {
-					if f.CanSet() && marker != nil {
-						f.Set(reflect.ValueOf(marker))
+				// Pagination Token
+				for _, tn := range []string{"Marker", "NextToken"} {
+					f := input.Elem().FieldByName(tn)
+					if f.IsValid() {
+						if f.CanSet() && marker != nil {
+							f.Set(reflect.ValueOf(marker))
+						}
 					}
 				}
 
-				{
-					f := input.Elem().FieldByName("MaxItems")
+				// Max
+				for _, m := range []string{"MaxItems"} {
+					f := input.Elem().FieldByName(m)
 					if f.IsValid() {
 						if f.CanSet() {
 							f.Set(reflect.ValueOf(&maxItem))
+						}
+					}
+				}
+				for _, m := range []string{"MaxResults"} {
+					f := input.Elem().FieldByName(m)
+					if f.IsValid() {
+						if f.CanSet() {
+							f.Set(reflect.ValueOf(maxItem))
 						}
 					}
 				}
@@ -203,6 +220,15 @@ func (c *Collector) callListMethod(ctx context.Context, client interface{}, m re
 		if r.Field(i).Kind() == reflect.Slice {
 			for j := 0; j < r.Field(i).Len(); j++ {
 				rr := r.Field(i).Index(j)
+				if rr.Kind() == reflect.String {
+					// []string
+					a, err := New(rr.String())
+					if err == nil {
+						arns = append(arns, a)
+					}
+					continue
+				}
+				// []struct
 				arn, ok := getFieldString(rr, "Arn")
 				if ok {
 					a, err := New(arn)
@@ -216,6 +242,9 @@ func (c *Collector) callListMethod(ctx context.Context, client interface{}, m re
 	}
 	var next *string
 	mrk, ok := getFieldString(r, "Marker")
+	if !ok {
+		mrk, ok = getFieldString(r, "NextToken")
+	}
 	if ok && mrk != "" {
 		next = &mrk
 	}
@@ -242,6 +271,7 @@ func collectArnsUsingTaggingApi(ctx context.Context, cfg aws.Config) (Arns, erro
 	var token *string
 	arns := Arns{}
 	c := taggingapi.NewFromConfig(cfg)
+
 	for {
 		o, err := c.GetResources(ctx, &taggingapi.GetResourcesInput{
 			PaginationToken: token,
@@ -261,5 +291,6 @@ func collectArnsUsingTaggingApi(ctx context.Context, cfg aws.Config) (Arns, erro
 		}
 		token = o.PaginationToken
 	}
-	return arns, nil
+
+	return arns.Unique(), nil
 }
