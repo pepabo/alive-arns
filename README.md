@@ -45,6 +45,28 @@ arn:aws:route53:::healthcheck/xxxxxxx-xxxx-xxxx-xxxx-aaaaaaaaaaa
 arn:aws:route53:::healthcheck/xxxxxxx-xxxx-xxxx-xxxx-bbbbbbbbbbb
 ```
 
+### Using jq
+
+#### Count resources by region
+
+``` console
+$ alive-arns -t json | jq 'group_by(.region) | map({"region": .[0].region, "count": length})'
+[
+  {
+    "region": "",
+    "count": 3345
+  },
+  {
+    "region": "ap-northeast-1",
+    "count": 438
+  },
+  {
+    "region": "us-east-1",
+    "count": 124
+  }
+]
+```
+
 ## Supported ARNs
 
 - [ARNs that can be retrieved with the Resource Groups Tagging API](https://docs.aws.amazon.com/resourcegroupstagging/latest/APIReference/supported-services.html)

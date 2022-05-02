@@ -30,11 +30,14 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
+	"github.com/goccy/go-json"
 	"github.com/pepabo/alive-arns/arn"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 )
+
+var format string
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
@@ -53,7 +56,7 @@ var rootCmd = &cobra.Command{
 			return err
 		}
 
-		c := arn.New()
+		c := arn.NewCollector()
 		arns := arn.Arns{}
 		for _, r := range regions {
 			cfg.Region = r
@@ -65,12 +68,24 @@ var rootCmd = &cobra.Command{
 			arns = append(arns, a...)
 		}
 
-		for _, a := range arns.Unique().Sort() {
-			cmd.Printf("%s\n", a)
+		switch format {
+		case "json":
+			e := json.NewEncoder(os.Stdout)
+			e.SetIndent("", "  ")
+			if err := e.EncodeContext(ctx, arns.Unique().Sort()); err != nil {
+				return err
+			}
+		default:
+			for _, a := range arns.Unique().Sort() {
+				cmd.Printf("%s\n", a)
+			}
 		}
-
 		return nil
 	},
+}
+
+func init() {
+	rootCmd.Flags().StringVarP(&format, "format", "t", "", "output format")
 }
 
 func Execute() {
