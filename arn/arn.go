@@ -214,8 +214,8 @@ func collectArnsUsingTaggingApi(ctx context.Context, cfg aws.Config) (Arns, erro
 	var token *string
 	region := cfg.Region
 	arns := Arns{}
+	c := taggingapi.NewFromConfig(cfg)
 	for {
-		c := taggingapi.NewFromConfig(cfg)
 		o, err := c.GetResources(ctx, &taggingapi.GetResourcesInput{
 			PaginationToken: token,
 		})
