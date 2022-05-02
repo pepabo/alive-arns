@@ -12,6 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/iam"
 	taggingapi "github.com/aws/aws-sdk-go-v2/service/resourcegroupstaggingapi"
 	"github.com/aws/aws-sdk-go-v2/service/securityhub"
+	"github.com/rs/zerolog/log"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -128,7 +129,7 @@ func (c *Collector) collectArns(ctx context.Context, cfg aws.Config) (Arns, erro
 							a   Arns
 							err error
 						)
-						a, marker, err = c.callListMethod(ctx, client, m, marker)
+						a, marker, err = c.callListOrDescribeMethod(ctx, client, m, marker)
 						if err != nil {
 							return err
 						}
@@ -161,8 +162,8 @@ func (c *Collector) collectArns(ctx context.Context, cfg aws.Config) (Arns, erro
 	return arns, nil
 }
 
-func (c *Collector) callListMethod(ctx context.Context, client interface{}, m reflect.Method, marker *string) (Arns, *string, error) {
-	if !strings.HasPrefix(m.Name, "List") {
+func (c *Collector) callListOrDescribeMethod(ctx context.Context, client interface{}, m reflect.Method, marker *string) (Arns, *string, error) {
+	if !strings.HasPrefix(m.Name, "List") && !strings.HasPrefix(m.Name, "Describe") {
 		return nil, nil, nil
 	}
 	arns := Arns{}
@@ -216,26 +217,27 @@ func (c *Collector) callListMethod(ctx context.Context, client interface{}, m re
 		return nil, nil, nil
 	}
 	r := result[0].Elem()
+	arn, ok := getFieldString(r, "Arn")
+	if ok {
+		a, err := New(arn)
+		if err == nil {
+			arns = append(arns, a)
+		}
+	}
+
 	for i := 0; i < r.NumField(); i++ {
 		if r.Field(i).Kind() == reflect.Slice {
 			for j := 0; j < r.Field(i).Len(); j++ {
 				rr := r.Field(i).Index(j)
 				if rr.Kind() == reflect.String {
 					// []string
-					a, err := New(rr.String())
-					if err == nil {
-						arns = append(arns, a)
-					}
+					arns = appendARN(arns, rr.String())
 					continue
 				}
 				// []struct
 				arn, ok := getFieldString(rr, "Arn")
 				if ok {
-					a, err := New(arn)
-					if err != nil {
-						return nil, nil, err
-					}
-					arns = append(arns, a)
+					arns = appendARN(arns, arn)
 				}
 			}
 		}
@@ -280,11 +282,7 @@ func collectArnsUsingTaggingApi(ctx context.Context, cfg aws.Config) (Arns, erro
 			return nil, err
 		}
 		for _, r := range o.ResourceTagMappingList {
-			arn, err := New(*r.ResourceARN)
-			if err != nil {
-				return nil, err
-			}
-			arns = append(arns, arn)
+			arns = appendARN(arns, *r.ResourceARN)
 		}
 		if o.PaginationToken == nil || *o.PaginationToken == "" {
 			break
@@ -293,4 +291,14 @@ func collectArnsUsingTaggingApi(ctx context.Context, cfg aws.Config) (Arns, erro
 	}
 
 	return arns.Unique(), nil
+}
+
+func appendARN(arns Arns, arn string) Arns {
+	a, err := New(arn)
+	if err == nil {
+		arns = append(arns, a)
+	} else {
+		log.Debug().Err(err).Str("arn", arn)
+	}
+	return arns
 }
