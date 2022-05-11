@@ -16,7 +16,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-var maxItem int32 = 1000
+var maxItem int32 = 100
 
 type Arn struct {
 	Arn       string `json:"arn"`
@@ -98,15 +98,21 @@ func (c *Collector) CollectArns(ctx context.Context, cfg aws.Config) (Arns, erro
 	if err != nil {
 		return nil, err
 	}
-	arns2, err := c.collectArns(ctx, cfg)
+	arns2, err := c.collectArnsUsingReflect(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}
 	arns = append(arns, arns2...)
+	arns3, err := c.collectArnsSecurityhubExtras(ctx, cfg)
+	if err != nil {
+		return nil, err
+	}
+	arns = append(arns, arns3...)
+
 	return arns.Unique(), nil
 }
 
-func (c *Collector) collectArns(ctx context.Context, cfg aws.Config) (Arns, error) {
+func (c *Collector) collectArnsUsingReflect(ctx context.Context, cfg aws.Config) (Arns, error) {
 	arns := Arns{}
 	clients := []interface{}{
 		securityhub.NewFromConfig(cfg),
@@ -123,6 +129,14 @@ func (c *Collector) collectArns(ctx context.Context, cfg aws.Config) (Arns, erro
 			func(client interface{}, i int) {
 				eg.Go(func() error {
 					m := cType.Method(i)
+					if containsPrefix(methodPrefixIgnores, m.Name) || containsSuffix(methodSuffixIgnores, m.Name) {
+						return nil
+					}
+
+					key := fmt.Sprintf("%s.%s", cType.Elem().String(), m.Name)
+					if contains(ignores, key) || contains(extras, key) {
+						return nil
+					}
 					var marker *string
 					for {
 						var (
@@ -212,17 +226,18 @@ func (c *Collector) callListOrDescribeMethod(ctx context.Context, client interfa
 			}
 		}
 	}
+
 	result := m.Func.Call(argv)
+	if len(result) > 1 && !result[1].IsNil() {
+		return nil, nil, result[1].Interface().(error)
+	}
 	if result[0].IsNil() {
 		return nil, nil, nil
 	}
 	r := result[0].Elem()
 	arn, ok := getFieldString(r, "Arn")
 	if ok {
-		a, err := New(arn)
-		if err == nil {
-			arns = append(arns, a)
-		}
+		arns = appendARN(arns, arn)
 	}
 
 	for i := 0; i < r.NumField(); i++ {
@@ -301,4 +316,31 @@ func appendARN(arns Arns, arn string) Arns {
 		log.Debug().Err(err).Str("arn", arn)
 	}
 	return arns
+}
+
+func contains(s []string, e string) bool {
+	for _, v := range s {
+		if e == v {
+			return true
+		}
+	}
+	return false
+}
+
+func containsPrefix(s []string, e string) bool {
+	for _, v := range s {
+		if strings.HasPrefix(e, v) {
+			return true
+		}
+	}
+	return false
+}
+
+func containsSuffix(s []string, e string) bool {
+	for _, v := range s {
+		if strings.HasSuffix(e, v) {
+			return true
+		}
+	}
+	return false
 }
