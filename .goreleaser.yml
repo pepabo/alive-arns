@@ -51,7 +51,7 @@ brews:
     commit_author:
       name: 'GMO Pepabo, inc.'
     homepage: https://github.com/pepabo/alive-arns
-    description: alive-arns print AWS Resource Names across all regions.
+    description: alive-arns print alive AWS Resource Names across all regions.
     license: MIT
     install: |
       bin.install 'alive-arns'
@@ -67,7 +67,7 @@ nfpms:
       - alive-arns-linux
     homepage: https://github.com/pepabo/alive-arns
     maintainer: 'GMO Pepabo, inc.'
-    description: alive-arns print AWS Resource Names across all regions.
+    description: alive-arns print alive AWS Resource Names across all regions.
     license: MIT
     formats:
       - deb

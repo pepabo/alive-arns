@@ -42,8 +42,8 @@ var format string
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
 	Use:   "alive-arns",
-	Short: "print alive AWS Resource Names",
-	Long:  `print alive AWS Resource Names.`,
+	Short: "print alive AWS Resource Names across all regions",
+	Long:  `print alive AWS Resource Names across all regions.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()
 		cfg, err := config.LoadDefaultConfig(ctx)

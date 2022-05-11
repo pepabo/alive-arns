@@ -1,6 +1,8 @@
 # alive-arns
 
-`alive-arns` print AWS Resource Names across all regions.
+`alive-arns` print alive AWS Resource Names across all regions.
+
+alive = exists && is enabled.
 
 ## Usage
 
